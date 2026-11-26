@@ -22,6 +22,7 @@ Never rewrite an existing change file; add a new one.
 | --- | --- |
 | `docs/changes/2026-11-25-ai-ready-docs.md` | Adds `docs/README.md`, topic docs, `AGENTS.md`, `CLAUDE.md` and project skills |
 | `docs/changes/2026-11-26-registry-login-packages-token.md` | Registry login uses the shared `PACKAGES_TOKEN` |
+| `docs/changes/2026-11-26-gate-image-build-on-checks.md` | Image build runs only after all check jobs pass |
 
 ## Maintenance rules
 

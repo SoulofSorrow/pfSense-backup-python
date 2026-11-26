@@ -36,6 +36,8 @@ docker run --rm -v /my/backup/folder:/app/backups pfsense-backup-py <url> <usern
 
 ## CI
 
+Job order: the check jobs (`lint`) run first. The image job `build-and-push` has `needs: [lint]` and starts only when all of them pass; on pull requests it builds without pushing.
+
 Two equivalent workflows with jobs `lint` and `build-and-push`:
 
 | File | Registry | Notes |
