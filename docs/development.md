@@ -36,6 +36,10 @@ docker run --rm -v /my/backup/folder:/app/backups pfsense-backup-py <url> <usern
 
 ## CI
 
+Job order: the check jobs (`lint`) run first. The image job `build-and-push` has `needs: [lint]` and starts only when all of them pass; on pull requests it builds without pushing.
+
+Emulation: `docker/setup-qemu-action` is pinned to `tonistiigi/binfmt:qemu-v9.2.2`; with `latest` (QEMU 10) Node crashed with `Illegal instruction` in the arm64 build and the job hung. Job `build-and-push` has `timeout-minutes: 45`.
+
 Two equivalent workflows with jobs `lint` and `build-and-push`:
 
 | File | Registry | Notes |
