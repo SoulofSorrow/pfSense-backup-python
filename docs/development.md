@@ -40,7 +40,7 @@ Two equivalent workflows with jobs `lint` and `build-and-push`:
 
 | File | Registry | Notes |
 | --- | --- | --- |
-| `.gitea/workflows/ci.yml` | `vars.REGISTRY_GITEA`, default `gitea.groot.rocks` | Runs in `catthehacker/ubuntu:act-latest`; build via `docker:27-dind` service with buildx `network=host` (see `docs/gitea-runner-dns.md`); credentials `secrets.REGISTRY_USERNAME` / `secrets.REGISTRY_PASSWORD` |
+| `.gitea/workflows/ci.yml` | `vars.REGISTRY_GITEA`, default `gitea.groot.rocks` | Runs in `catthehacker/ubuntu:act-latest`; build via `docker:27-dind` service with buildx `network=host` (see `docs/gitea-runner-dns.md`); credentials `secrets.GITEA_USERNAME` (default `github.actor`) / `secrets.PACKAGES_TOKEN` |
 | `.github/workflows/ci.yml` | `ghcr.io` | `GITHUB_TOKEN`, GHA build cache |
 
 Triggers: push to `main`, tags `v*.*.*`, pull requests to `main`, manual.
