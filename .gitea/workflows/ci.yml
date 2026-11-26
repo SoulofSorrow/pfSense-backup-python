@@ -8,10 +8,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-env:
-  REGISTRY: ${{ vars.REGISTRY_GITEA || 'gitea.groot.rocks' }}
-  IMAGE_NAME: ${{ github.repository }}
-
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -34,11 +30,14 @@ jobs:
         run: python -m compileall pfsense_backup.py
 
   build-and-push:
-    # Fail instead of blocking the runner when an emulated build hangs.
-    timeout-minutes: 45
+    name: Build & Push
     # Runs only when every check job passed.
     needs: [lint]
+    # Fail instead of blocking the runner when an emulated build hangs.
+    timeout-minutes: 45
     runs-on: ubuntu-latest
+    # Job containers have no Docker socket of their own, so the build talks to
+    # a Docker-in-Docker service.
     services:
       dind:
         image: docker:27-dind
@@ -52,15 +51,16 @@ jobs:
           --health-retries 5
     env:
       DOCKER_HOST: tcp://dind:2375
+      # Only the boolean reaches the environment, never the secret itself.
+      HAS_REGISTRY_TOKEN: ${{ secrets.PACKAGES_TOKEN != '' }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Wait for Docker daemon
+      - name: Wait for the Docker daemon
         run: |
           for i in $(seq 1 30); do
             docker info >/dev/null 2>&1 && break
-            echo "waiting for dind daemon... ($i)"
+            echo "waiting for the dind daemon... ($i)"
             sleep 2
           done
           docker info
@@ -72,46 +72,82 @@ jobs:
           # "Illegal instruction" in the arm64 build and the job hangs.
           image: tonistiigi/binfmt:qemu-v9.2.2
 
-      - name: Set up Docker Buildx
+      - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          # network=host: Buildkit-Container nutzt die Netns des dind-Containers.
-          # Das Entitlement erlaubt RUN-Steps mit Host-Network (siehe Build-Step),
-          # damit sie DNS auflösen (embedded DNS -> erlaubte Hoster-Resolver).
+          # network=host: BuildKit uses the network namespace of the dind
+          # container, so RUN steps can resolve DNS.
           driver-opts: network=host
           buildkitd-flags: --allow-insecure-entitlement network.host
 
-      # Login + Push nur außerhalb von Pull Requests (PR = nur Build-Validierung).
-      - name: Log in to Gitea Container Registry
-        if: github.event_name != 'pull_request'
+      - name: Resolve the image reference
+        id: image
+        env:
+          # Read here, not in a workflow-level env block: this Gitea does not
+          # expand the vars context there.
+          RAW_REGISTRY: ${{ vars.REGISTRY_GITEA || 'gitea.groot.rocks' }}
+        run: |
+          # Strip whitespace: a variable set in the web UI may end in a newline.
+          registry=$(printf '%s' "$RAW_REGISTRY" | tr -d '[:space:]')
+          # Registry paths must be lower case, repository owners need not be.
+          repository=$(printf '%s' "$GITHUB_REPOSITORY" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+          echo "registry=$registry" >> "$GITHUB_OUTPUT"
+          echo "reference=$registry/$repository" >> "$GITHUB_OUTPUT"
+          echo "Image reference: $registry/$repository"
+
+      - name: Log in to the Gitea container registry
+        if: github.event_name != 'pull_request' && env.HAS_REGISTRY_TOKEN == 'true'
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ${{ steps.image.outputs.registry }}
           username: ${{ secrets.GITEA_USERNAME || github.actor }}
           password: ${{ secrets.PACKAGES_TOKEN }}
 
-      - name: Extract metadata (tags, labels)
+      - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ steps.image.outputs.reference }}
+          # "latest" only from the raw rule below, never automatically.
+          flavor: latest=false
+          labels: |
+            org.opencontainers.image.title=pfSense-backup-python
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
+            # Every pushed build: the commit, e.g. sha-1a2b3c4.
+            type=sha,prefix=sha-,format=short
+            # Release tag vX.Y.Z: the version X.Y.Z (also for prereleases).
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
+            # "latest" only for a release tag vX.Y.Z, not for a prerelease.
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
 
-      - name: Build and push image
+      - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: ${{ github.event_name != 'pull_request' && env.HAS_REGISTRY_TOKEN == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # RUN-Steps in der Host-Netns (dind) ausführen -> DNS funktioniert.
           network: host
           allow: network.host
+
+      - name: Build summary
+        if: always()
+        run: |
+          {
+            echo "### Build summary"
+            echo "Image: ${{ steps.image.outputs.reference }}"
+            echo "Platforms: linux/amd64,linux/arm64"
+            echo "Tags:"
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              echo "Push: skipped for pull requests"
+            elif [ "${{ env.HAS_REGISTRY_TOKEN }}" != "true" ]; then
+              echo "Push: skipped, the PACKAGES_TOKEN secret is not set"
+            else
+              echo "Push: yes"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

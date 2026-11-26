@@ -51,9 +51,7 @@ Triggers: push to `main`, tags `v*.*.*`, pull requests to `main`, manual.
 Images are built for `linux/amd64` and `linux/arm64` and pushed except on
 pull requests.
 
-Image tags (`docker/metadata-action`): branch name, `pr-<n>`, semver
-`<version>` and `<major>.<minor>` on tags, short SHA, `latest` on the default
-branch.
+Image tags: every pushed build gets `sha-<short>` (also pushes to `main`). A release tag `vX.Y.Z` additionally pushes `X.Y.Z` and `latest`; a prerelease tag `vX.Y.Z-rc1` pushes `X.Y.Z-rc1` without `latest`. No branch tags (no `main`), no floating `X` / `X.Y` tags. Pull requests build without pushing.
 
 ## Versioning
 
