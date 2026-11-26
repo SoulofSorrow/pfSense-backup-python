@@ -40,3 +40,8 @@ BackupTarget "/opt/pfSense/backups/pfSense-another" "https://10.10.10.4:444" "ad
 
 pfSense nutzt standardmäßig selbstsignierte Zertifikate. Die Zertifikatsprüfung
 wird daher (wie im Original) deaktiviert.
+
+## Dokumentation
+
+- `docs/README.md`: Index der technischen Dokumentation und der Änderungsprotokolle.
+- `AGENTS.md`: Anweisungen für KI-Coding-Agenten (Befehle, Regeln, Projekt-Skills).
